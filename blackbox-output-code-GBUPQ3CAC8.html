@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Cake Wonderland</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+            background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 50%, #fecfef 100%);
+        }
+
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #canvas {
+            display: block;
+        }
+
+        .ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 15px;
+            z-index: 100;
+        }
+
+        button {
+            padding: 12px 24px;
+            background: linear-gradient(45deg, #ff6b6b, #ff8e8e);
+            border: none;
+            border-radius: 25px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(255,107,107,0.4);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255,107,107,0.6);
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div class="ui">
+            <h1>🍰 3D Cake Wonderland</h1>
+            <p>Drag to rotate • Scroll to zoom • Click cakes to interact!</p>
+        </div>
+        
+        <div class="controls">
+            <button onclick="toggleAnimation()">🎉 Party Mode</button>
+            <button onclick="changeCakeTheme()">🎨 New Flavor</button>
+            <button onclick="explodeCake()">💥 Explode!</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    
+    <script>
+        // Scene setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.getElementById('container').appendChild(renderer.domElement);
+
+        // Controls
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(10, 10, 5);
+        directionalLight.castShadow = true;
+        directionalLight.shadow.mapSize.width = 2048;
+        directionalLight.shadow.mapSize.height = 2048;
+        scene.add(directionalLight);
+
+        const pointLight = new THREE.PointLight(0xff6b6b, 1, 100);
+        pointLight.position.set(0, 10, 0);
+        scene.add(pointLight);
+
+        // Cake materials
+        const cakeMaterials = {
+            chocolate: new THREE.MeshPhongMaterial({ color: 0x8B4513 }),
+            strawberry: new THREE.MeshPhongMaterial({ color: 0xFF69B4 }),
+            vanilla: new THREE.MeshPhongMaterial({ color: 0xFFFDD0 }),
+            blueberry: new THREE.MeshPhongMaterial({ color: 0x4169E1 })
+        };
+
+        const frostingMaterial = new THREE.MeshPhongMaterial({ color: 0xFFFFFF });
+        const cherryMaterial = new THREE.MeshPhongMaterial({ color: 0xFF0000 });
+
+        let cakes = [];
+        let particles = [];
+        let animationEnabled = true;
+        let currentTheme = 0;
+        const themes = ['chocolate', 'strawberry', 'vanilla', 'blueberry'];
+
+        // Create cake function
+        function createCake(x, y, z, scale = 1, theme = 'chocolate') {
+            const cakeGroup = new THREE.Group();
+
+            // Cake layers
+            const layers = [1.2, 1.0, 0.8];
+            layers.forEach((size, index) => {
+                const geometry = new THREE.CylinderGeometry(2 * size * scale, 2.2 * size * scale, 0.8 * scale, 32);
+                const layer = new THREE.Mesh(geometry, cakeMaterials[theme]);
+                layer.position.y = index * 0.9 * scale;
+                layer.castShadow = true;
+                layer.receiveShadow = true;
+                cakeGroup.add(layer);
+
+                // Frosting
+                const frostingGeo = new THREE.CylinderGeometry(2.1 * size * scale, 2.3 * size * scale, 0.3 * scale, 32);
+                const frosting = new THREE.Mesh(frostingGeo, frostingMaterial);
+                frosting.position.y = index * 0.9 * scale + 0.55 * scale;
+                cakeGroup.add(frosting);
+            });
+
+            // Topper
+            const topperGeo = new THREE.SphereGeometry(0.4 * scale, 32, 32);
+            const cherry = new THREE.Mesh(topperGeo, cherryMaterial);
+            cherry.position.y = 2.8 * scale;
+            cakeGroup.add(cherry);
+
+            cakeGroup.position.set(x, y, z);
+            cakeGroup.userData = { theme, exploded: false, velocity: new THREE.Vector3() };
+            scene.add(cakeGroup);
+            cakes.push(cakeGroup);
+
+            return cakeGroup;
+        }
+
+        // Create multiple cakes
+        createCake(-4, 0, 0, 0.8, 'chocolate');
+        createCake(4, 0, 0, 1.0, 'strawberry');
+        createCake(0, 0, -4, 0.9, 'vanilla');
+        createCake(0, 0, 4, 1.1, 'blueberry');
+        createCake(0, -1, 0, 1.5, 'chocolate');
+
+        // Particle system
+        function createParticles() {
+            const particleGeometry = new THREE.BufferGeometry();
+            const particleCount = 1000;
+            const positions = new Float32Array(particleCount * 3);
+            const colors = new Float32Array(particleCount * 3);
+
+            for (let i = 0; i < particleCount * 3; i += 3) {
+                positions[i] = (Math.random() - 0.5) * 50;
+                positions[i + 1] = Math.random() * 20;
+                positions[i + 2] = (Math.random() - 0.5) * 50;
+
+                colors[i] = Math.random();
+                colors[i + 1] = Math.random() * 0.5 + 0.5;
+                colors[i + 2] = 1;
+            }
+
+            particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            particleGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            const particleMaterial = new THREE.PointsMaterial({
+                size: 0.1,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.8
+            });
+
+            const particlesSystem = new THREE.Points(particleGeometry, particleMaterial);
+            scene.add(particlesSystem);
+            particles.push(particlesSystem);
+        }
+
+        createParticles();
+
+        // Camera position
+        camera.position.set(0, 5, 10);
+
+        // Mouse interaction
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        function onMouseClick(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(cakes);
+
+            if (intersects.length > 0) {
+                const cake = intersects[0].object.parent;
+                explodeCake(cake);
+            }
+        }
+
+        // Animation functions
+        function animateCake(cake) {
+            cake.rotation.y += 0.01;
+            cake.children.forEach((layer, index) => {
+                layer.rotation.z += 0.005 * (index + 1);
+                layer.scale.setScalar(1 + Math.sin(Date.now() * 0.005 + index) * 0.05);
+            });
+        }
+
+        function explodeCake(targetCake = null) {
+            cakes.forEach((cake, index) => {
+                if (targetCake && cake !== targetCake) return;
+
+                cake.children.forEach(child => {
+                    child.userData.velocity = new THREE.Vector3(
+                        (Math.random() - 0.5) * 0.3,
+                        Math.random() * 0.2 + 0.1,
+                        (Math.random() - 0.5) * 0.3
+                    );
+                });
+                cake.userData.exploded = true;
+            });
+        }
+
+        // UI Functions
+        window.toggleAnimation = function() {
+            animationEnabled = !animationEnabled;
+        };
+
+        window.changeCakeTheme = function() {
+            currentTheme = (currentTheme + 1) % themes.length;
+            cakes.forEach((cake, index) => {
+                const newTheme = themes[(currentTheme + index) % themes.length];
+                cake.children.slice(0, -1).forEach(layer => {
+                    layer.material = cakeMaterials[newTheme];
+                });
+                cake.userData.theme = newTheme;
+            });
+        };
+
+        // Animate loop
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+
+            // Animate cakes
+            if (animationEnabled) {
+                cakes.forEach(cake => {
+                    if (!cake.userData.exploded) {
+                        animateCake(cake);
+                    } else {
+                        // Explode physics
+                        cake.position.add(cake.userData.velocity);
+                        cake.userData.velocity.y -= 0.01; // gravity
+                        cake.rotation.x += 0.05;
+                        cake.rotation.z += 0.03;
+
+                        if (cake.position.y < -10) {
+                            // Reset cake
+                            cake.position.set(
+                                (Math.random() - 0.5) * 20,
+                                0,
+                                (Math.random() - 0.5) * 20
+                            );
+                            cake.userData.exploded = false;
+                            cake.rotation.set(0, 0, 0);
+                        }
+                    }
+                });
+            }
+
+            // Animate particles
+            particles.forEach(particle => {
+                particle.rotation.y += 0.001;
+                particle.position.y += Math.sin(Date.now() * 0.001) * 0.01;
+            });
+
+            // Rotate lights
+            pointLight.position.x = Math.cos(Date.now() * 0.001) * 10;
+            pointLight.position.z = Math.sin(Date.now() * 0.001) * 10;
+
+            renderer.render(scene, camera);
+        }
+
+        // Event listeners
+        window.addEventListener('click', onMouseClick);
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Start animation
+        animate();
+    </script>
+</body>
+</html>
